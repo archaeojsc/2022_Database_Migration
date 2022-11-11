@@ -2,11 +2,13 @@
 
 import pyodbc
 import pandas as pd
+import os
 
 # %% Connection info
 
 db_driver = "{Microsoft Access Driver (*.mdb, *.accdb)}"
-db_path = "C:\\Users\\scardina\\Documents\\Projects\\Active Projects\\2022_Database_Migration\\1BOW.00.101 Prattsville (10-2014).accdb"
+# db_path = "C:\\Users\\scardina\\Documents\\Projects\\Active Projects\\2022_Database_Migration\\1BOW.00.101 Prattsville (10-2014).accdb"
+db_path = "C:\\Users\\Scott\\Documents\\2022_Database_Migration\\1BOW.00.101 Prattsville (10-2014).accdb"
 
 conn_str = rf"DRIVER={db_driver};" rf"DBQ={db_path};"
 
@@ -34,11 +36,10 @@ conn.close()
 
 # %% Get file paths for database files in directory
 
-import os
-
 filelist = []
 
-start_dir = "X:\\CRSP Databases"
+# start_dir = "X:\\CRSP Databases"
+start_dir = os.getcwd()
 
 file_sfx = (".accdb", ".mdb.old", ".mdb", ".DBF")
 
