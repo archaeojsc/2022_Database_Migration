@@ -7,7 +7,11 @@ import os
 # %% Connection info
 
 db_driver = "{Microsoft Access Driver (*.mdb, *.accdb)}"
+
+# Path for office workstation
 # db_path = "C:\\Users\\scardina\\Documents\\Projects\\Active Projects\\2022_Database_Migration\\1BOW.00.101 Prattsville (10-2014).accdb"
+
+# Path for home workstation
 db_path = "C:\\Users\\Scott\\Documents\\2022_Database_Migration\\1BOW.00.101 Prattsville (10-2014).accdb"
 
 conn_str = rf"DRIVER={db_driver};" rf"DBQ={db_path};"
