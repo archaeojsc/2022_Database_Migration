@@ -30,10 +30,13 @@ for top_directory in source_directories:
             if file.endswith(db_file_suffix):
                 db_files_list.append(os.path.join(root, file))
 
-# %% Function to connect to ODBC database and return cursor
+# %% Function to open ODBC database and return connection and cursor
 
 
-def db_connect_ms_access(odbc_driver, dbq_path):
+def db_connect_ms_access(dbq_path):
+    # Required Microsoft Access ODBC driver
+    odbc_driver = "{Microsoft Access Driver (*.mdb, *.accdb)}"
+
     # ODBC connection string
     conn_str = rf"DRIVER={odbc_driver};" rf"DBQ={dbq_path};"
 
@@ -44,9 +47,11 @@ def db_connect_ms_access(odbc_driver, dbq_path):
     return conn, cur
 
 
+# %% Function to extract database schema
+
+
 # %% Connect to database
 
-db_driver = "{Microsoft Access Driver (*.mdb, *.accdb)}"
 
 # Testing path for office workstation
 # db_path = "C:\\Users\\scardina\\Documents\\Projects\\Active Projects\\2022_Database_Migration\\1BOW.00.101 Prattsville (10-2014).accdb"
@@ -57,7 +62,7 @@ db_driver = "{Microsoft Access Driver (*.mdb, *.accdb)}"
 
 db_path = db_files_list[5]
 
-my_conn, my_cursor = db_connect_ms_access(db_driver, db_path)
+my_conn, my_cursor = db_connect_ms_access(db_path)
 
 # %% Retrieve list of database user table names, excluding system tables and
 # query views
