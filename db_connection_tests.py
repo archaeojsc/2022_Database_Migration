@@ -3,90 +3,84 @@
 import pyodbc
 import pandas as pd
 import os
+from collections import defaultdict
 
 # %% Get file paths for all database files in directories
 
 db_files_list = []
 
-file_directory_start = [
-    "X:\\CRSP Databases",
-    "X:\\CRSP Fieldwork 2020",
-    "X:\\CRSP Fieldwork 2021",
-    "X:\\CRSP Fieldwork 2022",
-]
+# CRSP directories for storing project databases
+# source_directories = [
+#     "X:\\CRSP Databases",
+#     "X:\\CRSP Fieldwork 2020",
+#     "X:\\CRSP Fieldwork 2021",
+#     "X:\\CRSP Fieldwork 2022",
+# ]
 
-# start_dir = os.getcwd()
+# Use current tree for testing
+source_directories = [os.getcwd()]
 
 # db_file_suffix = (".accdb", ".mdb.old", ".mdb", ".DBF") # Include old files
 
 db_file_suffix = (".accdb", ".mdb")  # Only include active files
 
-for top_directory in file_directory_start:
+for top_directory in source_directories:
     for root, dirs, files in os.walk(top_directory):
         for file in files:
             if file.endswith(db_file_suffix):
                 db_files_list.append(os.path.join(root, file))
 
+# %% Function to connect to ODBC database and return cursor
 
-# %% ODBC Connection info
+
+def db_connect_ms_access(odbc_driver, dbq_path):
+    # ODBC connection string
+    conn_str = rf"DRIVER={odbc_driver};" rf"DBQ={dbq_path};"
+
+    # Open ODBC connection and cursor
+    conn = pyodbc.connect(conn_str)
+    cur = conn.cursor()
+
+    return conn, cur
+
+
+# %% Connect to database
 
 db_driver = "{Microsoft Access Driver (*.mdb, *.accdb)}"
 
 # Testing path for office workstation
-db_path = "C:\\Users\\scardina\\Documents\\Projects\\Active Projects\\2022_Database_Migration\\1BOW.00.101 Prattsville (10-2014).accdb"
+# db_path = "C:\\Users\\scardina\\Documents\\Projects\\Active Projects\\2022_Database_Migration\\1BOW.00.101 Prattsville (10-2014).accdb"
 
-# Testing path for home workstation
-# db_path = "C:\\Users\\Scott\\Documents\\2022_Database_Migration\\1BOW.00.101 Prattsville (10-2014).accdb"
+# Testing path for home workstation db_path =
+# "C:\\Users\\Scott\\Documents\\2022_Database_Migration\\1BOW.00.101 Prattsville
+# (10-2014).accdb"
 
-# ODBC connection string
-conn_str = rf"DRIVER={db_driver};" rf"DBQ={db_path};"
+db_path = db_files_list[5]
 
-# %% Open ODBC connection and cursor
+my_conn, my_cursor = db_connect_ms_access(db_driver, db_path)
 
-conn = pyodbc.connect(conn_str)
-cur = conn.cursor()
+# %% Retrieve list of database user table names, excluding system tables and
+# query views
 
-# %% Retrieve list of database tables, excluding system tables and query views
+db_table_names = [t.table_name for t in my_cursor.tables(tableType="TABLE")]
 
-my_tables = [t.table_name for t in cur.tables(tableType="TABLE")]
+# %% Retrieve table definitions as dictionary
 
+db_table_def = defaultdict(dict)
 
-# %% Table columns
-
-for t in my_tables:
-    print("Table:\t", t, "\n")
-    for c in cur.columns(table=t):
-        print("\t", c.column_name, c.type_name, c.sql_data_type, c.is_nullable)
-    print("\n")
-
-# %% Primary Keys
-
-for t in my_tables:
-    print("Table:\t", t, "\n")
-    for p_key in cur.primaryKeys(table=t):
-        print("\t", p_key)
-    print("\n")
-
-# %% Foreign Keys
-
-for t in my_tables:
-    print("Table:\t", t, "\n")
-    for f_key in cur.foreignKeys(table=t):
-        print("\t", f_key)
-    print("\n")
-
-# %% table statistics
-
-for t in my_tables:
-    print("Table:\t", t, "\n")
-    for t_stat in cur.statistics(table=t, unique=True):
-        print("\t", t_stat)
-    print("\n")
+for t in db_table_names:
+    db_table_def[t]["primary_key"] = [
+        pk.column_name
+        for pk in my_cursor.statistics(table=t, unique=True)
+        if pk.index_name == "PrimaryKey"
+    ]
+    db_table_def[t]["column_names"] = [
+        c.column_name for c in my_cursor.columns(table=t)
+    ]
 
 
 # %% Close connection
 
-conn.close()
-
+my_conn.close()
 
 # %%
