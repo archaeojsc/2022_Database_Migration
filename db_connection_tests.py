@@ -32,8 +32,17 @@ for top_directory in source_directories:
 
 # %% Function to open ODBC database and return connection and cursor
 
+def odbc_connect_ms_access(dbq_path: str):
+    """ Returns pyodbc connection and cursor for a Microsoft Access
+        database.
 
-def db_connect_ms_access(dbq_path):
+        :param dbq_path: full absolute file path of MS Access database
+        :type dbq_path: str
+
+        :rtype: obj, obj
+        :return: odbc connection, connection cursor
+    """
+    
     # Required Microsoft Access ODBC driver
     odbc_driver = "{Microsoft Access Driver (*.mdb, *.accdb)}"
 
@@ -49,6 +58,37 @@ def db_connect_ms_access(dbq_path):
 
 # %% Function to extract database schema
 
+def extract_ms_access_db_schema(file_path):
+    db_table_defs = defaultdict(dict)
+
+    db_conn, db_cursor = odbc_connect_ms_access(file_path)
+
+    db_table_names = [
+        t.table_name 
+        for t in db_cursor.tables(tableType="TABLE")
+        ]
+
+    for curr_table in db_table_names:
+        db_table_defs[curr_table]={}
+
+        db_table_defs[curr_table]['primary_key'] = [
+            pk.column_name
+            for pk in db_cursor.statistics(table=curr_table, unique=True)
+            if pk.index_name == 'PrimaryKey'
+            ]
+
+        db_table_defs[curr_table]['column_defs']={}
+
+        for col in db_cursor.columns(table=curr_table):
+            db_table_defs[curr_table]['column_defs'][col.column_name] = {
+                'data_type_name': col.type_name,
+                'sql_data_type': col.sql_data_type, 
+                'is_nullable': col.is_nullable
+                }
+
+    db_conn.close()
+
+    return db_table_defs
 
 # %% Connect to database
 
@@ -62,7 +102,7 @@ def db_connect_ms_access(dbq_path):
 
 db_path = db_files_list[5]
 
-my_conn, my_cursor = db_connect_ms_access(db_path)
+my_conn, my_cursor = odbc_connect_ms_access(db_path)
 
 # %% Retrieve list of database user table names, excluding system tables and
 # query views
@@ -74,15 +114,21 @@ db_table_names = [t.table_name for t in my_cursor.tables(tableType="TABLE")]
 db_table_def = defaultdict(dict)
 
 for t in db_table_names:
-    db_table_def[t]["primary_key"] = [
+    db_table_def[t]['primary_key'] = [
         pk.column_name
         for pk in my_cursor.statistics(table=t, unique=True)
-        if pk.index_name == "PrimaryKey"
-    ]
-    db_table_def[t]["column_names"] = [
-        c.column_name for c in my_cursor.columns(table=t)
+        if pk.index_name == 'PrimaryKey'
     ]
 
+    db_table_def[t]['column_defs'] = {}
+    
+    for c in my_cursor.columns(table=t):
+        db_table_def[t]['column_defs'][c.column_name] = {
+            'data_type_name': c.type_name,
+            'sql_data_type': c.sql_data_type, 
+            'is_nullable': c.is_nullable
+            }
+    
 
 # %% Close connection
 
