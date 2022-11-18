@@ -107,27 +107,27 @@ my_conn, my_cursor = odbc_connect_ms_access(db_path)
 # %% Retrieve list of database user table names, excluding system tables and
 # query views
 
-db_table_names = [t.table_name for t in my_cursor.tables(tableType="TABLE")]
+# db_table_names = [t.table_name for t in my_cursor.tables(tableType="TABLE")]
 
-# %% Retrieve table definitions as dictionary
+# # %% Retrieve table definitions as dictionary
 
-db_table_def = defaultdict(dict)
+# db_table_def = defaultdict(dict)
 
-for t in db_table_names:
-    db_table_def[t]['primary_key'] = [
-        pk.column_name
-        for pk in my_cursor.statistics(table=t, unique=True)
-        if pk.index_name == 'PrimaryKey'
-    ]
+# for t in db_table_names:
+#     db_table_def[t]['primary_key'] = [
+#         pk.column_name
+#         for pk in my_cursor.statistics(table=t, unique=True)
+#         if pk.index_name == 'PrimaryKey'
+#     ]
 
-    db_table_def[t]['column_defs'] = {}
+#     db_table_def[t]['column_defs'] = {}
     
-    for c in my_cursor.columns(table=t):
-        db_table_def[t]['column_defs'][c.column_name] = {
-            'data_type_name': c.type_name,
-            'sql_data_type': c.sql_data_type, 
-            'is_nullable': c.is_nullable
-            }
+#     for c in my_cursor.columns(table=t):
+#         db_table_def[t]['column_defs'][c.column_name] = {
+#             'data_type_name': c.type_name,
+#             'sql_data_type': c.sql_data_type, 
+#             'is_nullable': c.is_nullable
+#             }
     
 
 # %% Close connection
