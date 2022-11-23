@@ -32,17 +32,19 @@ for top_directory in source_directories:
 
 # %% Function to open ODBC database and return connection and cursor
 
+
 def odbc_connect_ms_access(dbq_path: str):
-    """ Returns pyodbc connection and cursor for a Microsoft Access
-        database.
-
-        :param dbq_path: full absolute file path of MS Access database
-        :type dbq_path: str
-
-        :rtype: obj, obj
-        :return: odbc connection, connection cursor
     """
-    
+    Returns pyodbc connection and cursor for a Microsoft Access
+    database.
+
+    :param dbq_path: full absolute file path of MS Access database
+    :type dbq_path: str
+
+    :rtype: obj, obj
+    :return: odbc connection, odbc connection cursor
+    """
+
     # Required Microsoft Access ODBC driver
     odbc_driver = "{Microsoft Access Driver (*.mdb, *.accdb)}"
 
@@ -58,37 +60,53 @@ def odbc_connect_ms_access(dbq_path: str):
 
 # %% Function to extract database schema
 
-def extract_ms_access_db_schema(file_path):
+
+def extract_ms_access_db_schema(file_path: str):
+    """
+    Extracts table schema from Microsoft Access database using pyodbc.
+
+    :param file_path: full absolute file path of MS Access database
+    :type file_path: str
+
+    :rtype: dictionary
+    :returns: dictionary of table definitions
+    """
+
     db_table_defs = defaultdict(dict)
 
     db_conn, db_cursor = odbc_connect_ms_access(file_path)
 
-    db_table_names = [
-        t.table_name 
-        for t in db_cursor.tables(tableType="TABLE")
-        ]
+    db_table_names = [t.table_name for t in db_cursor.tables(tableType="TABLE")]
 
     for curr_table in db_table_names:
-        db_table_defs[curr_table]={}
+        db_table_defs[curr_table] = {}
 
-        db_table_defs[curr_table]['primary_key'] = [
-            pk.column_name
-            for pk in db_cursor.statistics(table=curr_table, unique=True)
-            if pk.index_name == 'PrimaryKey'
-            ]
+        db_table_defs[curr_table]["unique_indices"] = {}
 
-        db_table_defs[curr_table]['column_defs']={}
+        for s in my_cursor.statistics(table=curr_table, unique=True):
+            if s.index_name:
+                if s.index_name in db_table_defs[curr_table]["unique_indices"]:
+                    db_table_defs[curr_table]["unique_indices"][s.index_name].append(
+                        s.column_name
+                    )
+                else:
+                    db_table_defs[curr_table]["unique_indices"][s.index_name] = [
+                        s.column_name
+                    ]
+
+        db_table_defs[curr_table]["column_defs"] = {}
 
         for col in db_cursor.columns(table=curr_table):
-            db_table_defs[curr_table]['column_defs'][col.column_name] = {
-                'data_type_name': col.type_name,
-                'sql_data_type': col.sql_data_type, 
-                'is_nullable': col.is_nullable
-                }
+            db_table_defs[curr_table]["column_defs"][col.column_name] = {
+                "data_type_name": col.type_name,
+                "sql_data_type": col.sql_data_type,
+                "is_nullable": col.is_nullable,
+            }
 
     db_conn.close()
 
     return db_table_defs
+
 
 # %% Connect to database
 
@@ -100,37 +118,38 @@ def extract_ms_access_db_schema(file_path):
 # "C:\\Users\\Scott\\Documents\\2022_Database_Migration\\1BOW.00.101 Prattsville
 # (10-2014).accdb"
 
-db_path = db_files_list[5]
+db_path = db_files_list[0]
 
 my_conn, my_cursor = odbc_connect_ms_access(db_path)
 
-# %% Retrieve list of database user table names, excluding system tables and
-# query views
+# %%
 
-# db_table_names = [t.table_name for t in my_cursor.tables(tableType="TABLE")]
+# stat_keys = (
+#     "table_cat",
+#     "table_schem",
+#     "table_name",
+#     "non_unique",
+#     "index_qualifier",
+#     "index_name",
+#     "type",
+#     "ordinal_position",
+#     "column_name",
+#     "asc_or_desc",
+#     "cardinality",
+#     "pages",
+#     "filter_condition",
+# )
 
-# # %% Retrieve table definitions as dictionary
+my_table = "Provenience"
 
-# db_table_def = defaultdict(dict)
+unique_indices = defaultdict(dict)
 
-# for t in db_table_names:
-#     db_table_def[t]['primary_key'] = [
-#         pk.column_name
-#         for pk in my_cursor.statistics(table=t, unique=True)
-#         if pk.index_name == 'PrimaryKey'
-#     ]
-
-#     db_table_def[t]['column_defs'] = {}
-    
-#     for c in my_cursor.columns(table=t):
-#         db_table_def[t]['column_defs'][c.column_name] = {
-#             'data_type_name': c.type_name,
-#             'sql_data_type': c.sql_data_type, 
-#             'is_nullable': c.is_nullable
-#             }
-    
-
-# %% Close connection
+for s in my_cursor.statistics(table=my_table, unique=True):
+    if s.index_name:
+        if s.index_name in unique_indices:
+            unique_indices[s.index_name].append(s.column_name)
+        else:
+            unique_indices[s.index_name] = [s.column_name]
 
 my_conn.close()
 
