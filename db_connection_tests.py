@@ -122,7 +122,7 @@ db_path = db_files_list[0]
 
 my_conn, my_cursor = odbc_connect_ms_access(db_path)
 
-# %%
+# %% Index extraction testing
 
 # stat_keys = (
 #     "table_cat",
