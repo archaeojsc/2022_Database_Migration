@@ -83,7 +83,7 @@ def extract_ms_access_db_schema(file_path: str):
 
         db_table_defs[curr_table]["unique_indices"] = {}
 
-        for s in my_cursor.statistics(table=curr_table, unique=True):
+        for s in db_cursor.statistics(table=curr_table, unique=True):
             if s.index_name:
                 if s.index_name in db_table_defs[curr_table]["unique_indices"]:
                     db_table_defs[curr_table]["unique_indices"][s.index_name].append(
@@ -118,7 +118,7 @@ def extract_ms_access_db_schema(file_path: str):
 # "C:\\Users\\Scott\\Documents\\2022_Database_Migration\\1BOW.00.101 Prattsville
 # (10-2014).accdb"
 
-db_path = db_files_list[0]
+db_path = db_files_list[3]
 
 my_conn, my_cursor = odbc_connect_ms_access(db_path)
 
