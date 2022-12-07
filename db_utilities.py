@@ -1,30 +1,10 @@
 # %% Imports
 
-import pyodbc
-import pandas as pd
 import os
 from collections import defaultdict
+import pandas as pd
 import random
-
-# %% Get file paths for all database files in directories
-
-db_files_list = []
-
-# CRSP directories for storing project databases
-# source_directories = [
-#     "X:\\CRSP Databases",
-#     "X:\\CRSP Fieldwork 2020",
-#     "X:\\CRSP Fieldwork 2021",
-#     "X:\\CRSP Fieldwork 2022",
-# ]
-
-# Use current tree for testing
-source_directories = [os.getcwd()]
-
-# db_file_suffix = (".accdb", ".mdb.old", ".mdb", ".DBF") # Include old files
-
-db_file_suffix = (".accdb", ".mdb")  # Only include active files
-
+import pyodbc
 
 # %% Function to retrieve list of files, return pandas dataframe of file
 # information
@@ -151,82 +131,3 @@ def extract_ms_access_db_schema(file_path: str):
     db_conn.close()
 
     return db_table_defs
-
-
-# %% Build dictionary of database schema
-
-
-# %% Testing connection to database
-
-
-# Testing path for office workstation
-# db_path = "C:\\Users\\scardina\\Documents\\Projects\\Active Projects\\2022_Database_Migration\\1BOW.00.101 Prattsville (10-2014).accdb"
-
-# Testing path for home workstation db_path =
-# "C:\\Users\\Scott\\Documents\\2022_Database_Migration\\1BOW.00.101 Prattsville
-# (10-2014).accdb"
-
-db_path = db_files_list[3]
-
-my_conn, my_cursor = odbc_connect_ms_access(db_path)
-
-# %% Index extraction testing
-
-# stat_keys = (
-#     "table_cat",
-#     "table_schem",
-#     "table_name",
-#     "non_unique",
-#     "index_qualifier",
-#     "index_name",
-#     "type",
-#     "ordinal_position",
-#     "column_name",
-#     "asc_or_desc",
-#     "cardinality",
-#     "pages",
-#     "filter_condition",
-# )
-
-my_table = "Provenience"
-
-unique_indices = defaultdict(dict)
-
-for s in my_cursor.statistics(table=my_table, unique=True):
-    if s.index_name:
-        if s.index_name in unique_indices:
-            unique_indices[s.index_name].append(s.column_name)
-        else:
-            unique_indices[s.index_name] = [s.column_name]
-
-my_conn.close()
-
-# %% Testing extraction of database schema from dictionary
-
-# Choose random db from file list
-
-db_index = random.randint(0, len(db_files_list))
-
-test_db = db_files_list[db_index]
-
-test_db_schema = extract_ms_access_db_schema(test_db)
-
-# %% Parsing experiments
-
-# List of tables
-test_db_tables = [tbl for tbl in test_db_schema.keys()]
-
-# %% Function to return pandas df of table definitions
-
-
-def table_defs(db: dict):
-
-    df_tables = [t for t in db.keys()]
-
-    for tab in df_tables:
-        print(tab)
-
-    return
-
-
-# %%
