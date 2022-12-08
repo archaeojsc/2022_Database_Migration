@@ -166,7 +166,9 @@ def extract_ms_access_db_schema(file_path: str):
 # "C:\\Users\\Scott\\Documents\\2022_Database_Migration\\1BOW.00.101 Prattsville
 # (10-2014).accdb"
 
-db_path = db_files_list[3]
+db_files_list = get_db_files(source_directories[0], db_file_suffix)
+
+db_path = db_files_list.iloc[3]['file_path']
 
 my_conn, my_cursor = odbc_connect_ms_access(db_path)
 
@@ -207,7 +209,7 @@ my_conn.close()
 
 db_index = random.randint(0, len(db_files_list))
 
-test_db = db_files_list[db_index]
+test_db = db_files_list.iloc[db_index]['file_path']
 
 test_db_schema = extract_ms_access_db_schema(test_db)
 

@@ -3,7 +3,6 @@
 import os
 from collections import defaultdict
 import pandas as pd
-import random
 import pyodbc
 
 # %% Function to retrieve list of files, return pandas dataframe of file
