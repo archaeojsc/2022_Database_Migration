@@ -168,7 +168,7 @@ def extract_ms_access_db_schema(file_path: str):
 
 db_files_list = get_db_files(source_directories[0], db_file_suffix)
 
-db_path = db_files_list.iloc[3]['file_path']
+db_path = db_files_list.iloc[3]["file_path"]
 
 my_conn, my_cursor = odbc_connect_ms_access(db_path)
 
@@ -209,7 +209,7 @@ my_conn.close()
 
 db_index = random.randint(0, len(db_files_list))
 
-test_db = db_files_list.iloc[db_index]['file_path']
+test_db = db_files_list.iloc[db_index]["file_path"]
 
 test_db_schema = extract_ms_access_db_schema(test_db)
 
@@ -221,14 +221,28 @@ test_db_tables = [tbl for tbl in test_db_schema.keys()]
 # %% Function to return pandas df of table definitions
 
 
-def table_defs(db: dict):
+def extract_db_table_column_defs(db: dict):
+
+    df_table_def = pd.DataFrame(
+        columns=["db_table", "db_table_col_name", "db_table_col_type"]
+    )
 
     df_tables = [t for t in db.keys()]
 
     for tab in df_tables:
-        print(tab)
+        for col in db[tab]["column_defs"].keys():
+            new_def = pd.Series(
+                {
+                    "db_table": tab,
+                    "db_table_col_name": col,
+                    "db_table_col_type": db[tab]["column_defs"][col]["data_type_name"],
+                }
+            )
+            df_table_def = pd.concat(
+                [df_table_def, new_def.to_frame().T], ignore_index=True
+            )
 
-    return
+    return df_table_def
 
 
 # %%
