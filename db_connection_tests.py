@@ -168,9 +168,13 @@ def extract_ms_access_db_schema(file_path: str):
 
 db_files_list = get_db_files(source_directories[0], db_file_suffix)
 
-db_path = db_files_list.iloc[3]["file_path"]
+db_index = random.randint(0, len(db_files_list))
+
+db_path = db_files_list.iloc[db_index]["file_path"]
 
 my_conn, my_cursor = odbc_connect_ms_access(db_path)
+
+my_conn.close()
 
 # %% Index extraction testing
 
@@ -190,18 +194,18 @@ my_conn, my_cursor = odbc_connect_ms_access(db_path)
 #     "filter_condition",
 # )
 
-my_table = "Provenience"
+# my_table = "Provenience"
 
-unique_indices = defaultdict(dict)
+# unique_indices = defaultdict(dict)
 
-for s in my_cursor.statistics(table=my_table, unique=True):
-    if s.index_name:
-        if s.index_name in unique_indices:
-            unique_indices[s.index_name].append(s.column_name)
-        else:
-            unique_indices[s.index_name] = [s.column_name]
+# for s in my_cursor.statistics(table=my_table, unique=True):
+#     if s.index_name:
+#         if s.index_name in unique_indices:
+#             unique_indices[s.index_name].append(s.column_name)
+#         else:
+#             unique_indices[s.index_name] = [s.column_name]
 
-my_conn.close()
+# my_conn.close()
 
 # %% Testing extraction of database schema from dictionary
 
@@ -213,34 +217,35 @@ test_db = db_files_list.iloc[db_index]["file_path"]
 
 test_db_schema = extract_ms_access_db_schema(test_db)
 
-# %% Parsing experiments
-
 # List of tables
 test_db_tables = [tbl for tbl in test_db_schema.keys()]
 
-# %% Function to return pandas df of table definitions
+# %% Function to return pandas df of table columns definitions
 
 
-def extract_db_table_column_defs(db: dict):
+def extract_db_table_def_df(db: dict):
 
     df_table_def = pd.DataFrame(
-        columns=["db_table", "db_table_col_name", "db_table_col_type"]
+        columns=["db_table", "db_table_columns", "db_table_primary_key"]
     )
 
     df_tables = [t for t in db.keys()]
 
     for tab in df_tables:
-        for col in db[tab]["column_defs"].keys():
-            new_def = pd.Series(
-                {
-                    "db_table": tab,
-                    "db_table_col_name": col,
-                    "db_table_col_type": db[tab]["column_defs"][col]["data_type_name"],
-                }
-            )
-            df_table_def = pd.concat(
-                [df_table_def, new_def.to_frame().T], ignore_index=True
-            )
+        new_def = pd.Series(
+            {
+                "db_table": tab,
+                "db_table_columns": [col for col in db[tab]["column_defs"].keys()],
+                "db_table_primary_key": [
+                    v
+                    for k, v in db[tab]["unique_indices"].items()
+                    if (k == "PrimaryKey")
+                ],
+            }
+        )
+        df_table_def = pd.concat(
+            [df_table_def, new_def.to_frame().T], ignore_index=True
+        )
 
     return df_table_def
 
