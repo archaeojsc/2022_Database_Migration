@@ -1,5 +1,5 @@
 
-# Database Migration Project
+# Database Governance Assessmenty and Migration Project
 
 Initial experiments to transfer collection of data stored in separate Microsoft
 Access databases into a consolidated data management system.
