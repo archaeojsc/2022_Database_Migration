@@ -5,6 +5,7 @@ import pandas as pd
 import os
 from collections import defaultdict
 import random
+import hashlib
 
 # %% Get file paths for all database files in directories
 
@@ -45,11 +46,11 @@ def get_db_files(top_dir: str, file_ext):
     Returns
     -------
     dataframe
-        pandas dataframe with file name, directory string, and full absolute
+        pandas dataframe with id hash index, file name, directory string, and full absolute
         path
     """
 
-    df_files = pd.DataFrame(columns=["file_name", "file_dir", "file_path"])
+    df_files = pd.DataFrame(columns=["db_id", "file_name", "file_dir", "file_path"])
 
     for root, _, files in os.walk(top_dir):
         for file in files:
@@ -59,6 +60,11 @@ def get_db_files(top_dir: str, file_ext):
                         "file_name": file,
                         "file_dir": root,
                         "file_path": os.path.join(root, file),
+                        "database_identifier": hashlib.md5(
+                            os.path.join(root, file).encode(
+                                encoding="UTF-8", errors="strict"
+                            )
+                        ).hexdigest(),
                     }
                 )
                 df_files = pd.concat(
