@@ -7,28 +7,7 @@ from collections import defaultdict
 import random
 import hashlib
 
-# %% Get file paths for all database files in directories
-
-db_files_list = []
-
-# CRSP directories for storing project databases
-# source_directories = [
-#     "X:\\CRSP Databases",
-#     "X:\\CRSP Fieldwork 2020",
-#     "X:\\CRSP Fieldwork 2021",
-#     "X:\\CRSP Fieldwork 2022",
-# ]
-
-# Use current tree for testing
-source_directories = [os.getcwd()]
-
-# db_file_suffix = (".accdb", ".mdb.old", ".mdb", ".DBF") # Include old files
-
-db_file_suffix = (".accdb", ".mdb")  # Only include active files
-
-
-# %% Function to retrieve list of files, return pandas dataframe of file
-# information
+# %% Function to retrieve list of databases
 
 
 def get_db_files(top_dir: str, file_ext):
@@ -50,7 +29,9 @@ def get_db_files(top_dir: str, file_ext):
         path
     """
 
-    df_files = pd.DataFrame(columns=["db_id", "file_name", "file_dir", "file_path"])
+    df_files = pd.DataFrame(
+        columns=["db_identifier", "file_name", "file_dir", "file_path"]
+    )
 
     for root, _, files in os.walk(top_dir):
         for file in files:
@@ -60,7 +41,7 @@ def get_db_files(top_dir: str, file_ext):
                         "file_name": file,
                         "file_dir": root,
                         "file_path": os.path.join(root, file),
-                        "database_identifier": hashlib.md5(
+                        "db_identifier": hashlib.md5(
                             os.path.join(root, file).encode(
                                 encoding="UTF-8", errors="strict"
                             )
@@ -72,6 +53,31 @@ def get_db_files(top_dir: str, file_ext):
                 )
 
     return df_files
+
+
+# %% Get file paths for all database files in directories
+
+# CRSP directories for storing project databases
+source_directories = [
+    "X:\\CRSP Databases",
+    "X:\\CRSP Fieldwork 2020",
+    "X:\\CRSP Fieldwork 2021",
+    "X:\\CRSP Fieldwork 2022",
+]
+
+# Use current tree for testing
+# source_directories = [os.getcwd()]
+
+# db_file_suffix = (".accdb", ".mdb.old", ".mdb", ".DBF") # Include old files
+
+db_file_suffix = (".accdb", ".mdb")  # Only include active files
+
+df_databases = pd.DataFrame()
+
+for src in source_directories:
+    df_databases = pd.concat(
+        [df_databases, get_db_files(src, db_file_suffix)], ignore_index=True
+    )
 
 
 # %% Function to open ODBC database and return connection and cursor
@@ -102,6 +108,18 @@ def odbc_connect_ms_access(dbq_path: str):
     conn = pyodbc.connect(conn_str)
     cur = conn.cursor()
 
+    # Workaround for MS Access ODBC "utf-16-le" error
+    def decode_bad_utf16(raw_string):
+        s = raw_string.decode("utf-16le", "ignore")
+        try:
+            n = s.index("\u0000")
+            s = s[:n]  # null terminator
+        except:
+            pass
+        return s
+
+    conn.add_output_converter(pyodbc.SQL_WVARCHAR, decode_bad_utf16)
+
     return conn, cur
 
 
@@ -127,7 +145,12 @@ def extract_ms_access_db_schema(file_path: str):
 
     db_conn, db_cursor = odbc_connect_ms_access(file_path)
 
-    db_table_names = [t.table_name for t in db_cursor.tables(tableType="TABLE")]
+    db_table_names = [
+        t.table_name
+        for t in db_cursor.tables(tableType="TABLE")
+        # Exclude MS Access generated tables
+        if not (t.table_name in ["Paste Errors", "Switchboard Items"])
+    ]
 
     for curr_table in db_table_names:
         db_table_defs[curr_table] = {}
@@ -156,10 +179,7 @@ def extract_ms_access_db_schema(file_path: str):
 
     db_conn.close()
 
-    return db_table_defs
-
-
-# %% Build dictionary of database schema
+    return dict(db_table_defs)
 
 
 # %% Testing connection to database
@@ -172,11 +192,9 @@ def extract_ms_access_db_schema(file_path: str):
 # "C:\\Users\\Scott\\Documents\\2022_Database_Migration\\1BOW.00.101 Prattsville
 # (10-2014).accdb"
 
-db_files_list = get_db_files(source_directories[0], db_file_suffix)
+db_index = random.randint(0, len(df_databases) - 1)
 
-db_index = random.randint(0, len(db_files_list))
-
-db_path = db_files_list.iloc[db_index]["file_path"]
+db_path = df_databases.iloc[db_index]["file_path"]
 
 my_conn, my_cursor = odbc_connect_ms_access(db_path)
 
@@ -217,9 +235,9 @@ my_conn.close()
 
 # Choose random db from file list
 
-db_index = random.randint(0, len(db_files_list))
+db_index = random.randint(0, len(df_databases) - 1)
 
-test_db = db_files_list.iloc[db_index]["file_path"]
+test_db = df_databases.iloc[db_index]["file_path"]
 
 test_db_schema = extract_ms_access_db_schema(test_db)
 
@@ -235,9 +253,9 @@ def extract_db_table_def_df(db: dict):
         columns=["db_table", "db_table_columns", "db_table_primary_key"]
     )
 
-    df_tables = [t for t in db.keys()]
+    db_tables = [t for t in db.keys()]
 
-    for tab in df_tables:
+    for tab in db_tables:
         new_def = pd.Series(
             {
                 "db_table": tab,
@@ -255,5 +273,35 @@ def extract_db_table_def_df(db: dict):
 
     return df_table_def
 
+
+# %% Build dictionary of schema from all databases
+
+db_pull_test = {
+    id: extract_ms_access_db_schema(db_path)
+    for id, db_path in zip(df_databases["db_identifier"], df_databases["file_path"])
+}
+
+
+# %%
+
+test_db_tables = pd.DataFrame(
+    [[db, [k for k in db_pull_test[db].keys()]] for db in db_pull_test.keys()],
+    columns=["db_id", "db_tables"],
+)
+# %%
+
+unique_table_schema = pd.Series(
+    [list(x) for x in set(tuple(x) for x in test_db_tables["db_tables"])],
+    name="tale_schema",
+)
+
+# %%
+
+table_schema_counts = (
+    test_db_tables["db_tables"]
+    .value_counts()
+    .rename_axis("table_schema")
+    .reset_index(name="schema_count")
+)
 
 # %%

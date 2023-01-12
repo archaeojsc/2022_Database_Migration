@@ -5,8 +5,7 @@ from collections import defaultdict
 import pandas as pd
 import pyodbc
 
-# %% Function to retrieve list of files, return pandas dataframe of file
-# information
+# %% Function to retrieve list of databases
 
 
 def get_db_files(top_dir: str, file_ext):
@@ -24,11 +23,13 @@ def get_db_files(top_dir: str, file_ext):
     Returns
     -------
     dataframe
-        pandas dataframe with file name, directory string, and full absolute
+        pandas dataframe with id hash index, file name, directory string, and full absolute
         path
     """
 
-    df_files = pd.DataFrame(columns=["file_name", "file_dir", "file_path"])
+    df_files = pd.DataFrame(
+        columns=["db_identifier", "file_name", "file_dir", "file_path"]
+    )
 
     for root, _, files in os.walk(top_dir):
         for file in files:
@@ -38,6 +39,11 @@ def get_db_files(top_dir: str, file_ext):
                         "file_name": file,
                         "file_dir": root,
                         "file_path": os.path.join(root, file),
+                        "db_identifier": hashlib.md5(
+                            os.path.join(root, file).encode(
+                                encoding="UTF-8", errors="strict"
+                            )
+                        ).hexdigest(),
                     }
                 )
                 df_files = pd.concat(
@@ -75,6 +81,18 @@ def odbc_connect_ms_access(dbq_path: str):
     conn = pyodbc.connect(conn_str)
     cur = conn.cursor()
 
+    # Workaround for MS Access ODBC "utf-16-le" error
+    def decode_bad_utf16(raw_string):
+        s = raw_string.decode("utf-16le", "ignore")
+        try:
+            n = s.index("\u0000")
+            s = s[:n]  # null terminator
+        except:
+            pass
+        return s
+
+    conn.add_output_converter(pyodbc.SQL_WVARCHAR, decode_bad_utf16)
+
     return conn, cur
 
 
@@ -100,7 +118,12 @@ def extract_ms_access_db_schema(file_path: str):
 
     db_conn, db_cursor = odbc_connect_ms_access(file_path)
 
-    db_table_names = [t.table_name for t in db_cursor.tables(tableType="TABLE")]
+    db_table_names = [
+        t.table_name
+        for t in db_cursor.tables(tableType="TABLE")
+        # Exclude MS Access generated tables
+        if not (t.table_name in ["Paste Errors", "Switchboard Items"])
+    ]
 
     for curr_table in db_table_names:
         db_table_defs[curr_table] = {}
@@ -129,4 +152,4 @@ def extract_ms_access_db_schema(file_path: str):
 
     db_conn.close()
 
-    return db_table_defs
+    return dict(db_table_defs)

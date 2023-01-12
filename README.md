@@ -26,3 +26,30 @@ There are numerous challenges to this project:
 * [Experimentation and testing code](db_connection_tests.py)
 * [Completed utility functions code](db_utilities_extraction.py)
 
+### Current assessment
+
+There appear to be 909 separate MS Access databases, which collective represent
+118 different table schema. There are 89 databases with unique table structures.
+Most of these, however, appear to be based on the most common schema. These seem
+to be modified versions of a template database, with the addition of either
+specialized or redundant (copied?) tables.
+
+A relatively small portion of the databases are obviously special-purpose
+applications, and some appear to be attempts to update older DBase or FoxPro
+databases to MS Access.
+
+The vast majority of the databases follow some version of the table structure:  
+
+* Project Information table (`Project`, `Project Info`, or `Project_
+  Information`)
+* Site Information table (`Site` or `Site Info`)
+* Provenience Information table (`Provenience`, with a few breaking provenience
+  into *unit* and *level* sub-tables)
+* Artifact Catalog table (sometimes split into *site* and *non-site* catalogs)
+* Code List utility lookup table (`CODELIST`, `CodeList`, or `Codelist`)
+
+### Next Step
+
+Compile list of all unique tables (after correcting for minor naming convention
+differences) and find out how many versions of the table definitions exist
+(i.e., variations on table fields).
