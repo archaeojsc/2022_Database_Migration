@@ -18,8 +18,8 @@ There are numerous challenges to this project:
 * Some legacy project data was converted from FoxPro or DBase databases (i.e.,
   pre-1995).
 * The program office has *no* formal digital data governance or strategy, but
-  does have a statutory mandate to *permanently archive and curate* project
-  data!
+  does have a statutory mandate to permanently *archive* and *curate* project
+  data.
 
 ## Phase I -- Data gathering and exploration
 
@@ -29,10 +29,11 @@ There are numerous challenges to this project:
 ### Current assessment
 
 There appear to be 909 separate MS Access databases, which collective represent
-118 different table schema. There are 89 databases with unique table structures.
-Most of these, however, appear to be based on the most common schema. These seem
-to be modified versions of a template database, with the addition of either
-specialized or redundant (copied?) tables.
+118 different table schema. Not known yet how many of these are duplicates due
+to updating MS Access versions. There are 89 databases with unique table
+structures. Most of these, however, appear to be based on the most common
+schema. These seem to be modified versions of a template database, with the
+addition of either specialized or redundant (copied?) tables.
 
 A relatively small portion of the databases are obviously special-purpose
 applications, and some appear to be attempts to update older DBase or FoxPro
