@@ -153,3 +153,51 @@ def extract_ms_access_db_schema(file_path: str):
     db_conn.close()
 
     return dict(db_table_defs)
+
+# %% Function to return pandas df of table columns definitions
+
+
+def extract_db_table_def_df(id:str, db: dict):
+    """
+    Create pandas data frame of database table definitions
+
+    Parameters
+    ----------
+    id : str
+        Unique database identifier 
+    db : dict
+        Dictionary containing database schema information retrieved from
+        extract_ms_access_db_schema
+
+    Returns
+    -------
+    object
+        Returns pandas data frame of database identifier, table name, list of
+        unique indices, and list of table columns
+    """
+    df_table_def = pd.DataFrame(
+        columns=["db_id", "db_table", "db_table_primary_key", "db_table_columns"]
+    )
+
+    db_tables = [t for t in db.keys()]
+
+    for tab in db_tables:
+        new_def = pd.Series(
+            {
+                "db_id":id
+                "db_table": tab,
+                "db_table_columns": [col for col in db[tab]["column_defs"].keys()],
+                "db_table_primary_key": [
+                    v
+                    for k, v in db[tab]["unique_indices"].items()
+                    if (k == "PrimaryKey")
+                ],
+            }
+        )
+        df_table_def = pd.concat(
+            [df_table_def, new_def.to_frame().T], ignore_index=True
+        )
+
+    return df_table_def
+
+

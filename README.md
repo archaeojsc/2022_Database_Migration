@@ -28,16 +28,21 @@ There are numerous challenges to this project:
 
 ### Current assessment
 
-There appear to be 909 separate MS Access databases, which collective represent
-118 different table schema. Not known yet how many of these are duplicates due
-to updating MS Access versions. There are 89 databases with unique table
-structures. Most of these, however, appear to be based on the most common
-schema. These seem to be modified versions of a template database, with the
-addition of either specialized or redundant (copied?) tables.
+There appear to be 909 active MS Access databases, which collective represent
+118 different table schema. It is not known yet how many of these are duplicates
+due to updating MS Access versions, and does not include `*.mdb.old`[^fn1] or
+`*.DBF`[^fn2] files. Including these legacy databases increases the total to
+2,234 files.
 
-A relatively small portion of the databases are obviously special-purpose
-applications, and some appear to be attempts to update older DBase or FoxPro
-databases to MS Access.
+[^fn1]: Archive copies of databases that were updated to new versions?
+[^fn2]: Old FoxPro databases.
+
+There are 89 databases with unique table structures. Most of these, however,
+appear to be based on the most common schema. These seem to be modified versions
+of a template database, with the addition of either specialized or redundant
+(copied?) tables. A relatively small portion of the databases are obviously
+special-purpose applications, and some appear to be attempts to update older
+DBase or FoxPro databases to MS Access.
 
 The vast majority of the databases follow some version of the table structure:  
 
@@ -49,8 +54,12 @@ The vast majority of the databases follow some version of the table structure:
 * Artifact Catalog table (sometimes split into *site* and *non-site* catalogs)
 * Code List utility lookup table (`CODELIST`, `CodeList`, or `Codelist`)
 
-### Next Step
+### Next Steps
 
-Compile list of all unique tables (after correcting for minor naming convention
-differences) and find out how many versions of the table definitions exist
-(i.e., variations on table fields).
+* Compile list of all unique tables (after correcting for minor naming
+  convention differences) and find out how many versions of the table
+  definitions exist (i.e., variations on table fields).
+
+* Look at options for retrieving data from FoxPro files with
+  [`dbfread`](https://dbfread.readthedocs.io/en/latest/index.html) or
+  [`dpfpy`](https://dbfpy.sourceforge.net/).
