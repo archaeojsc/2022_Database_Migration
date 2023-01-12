@@ -58,15 +58,15 @@ def get_db_files(top_dir: str, file_ext):
 # %% Get file paths for all database files in directories
 
 # CRSP directories for storing project databases
-source_directories = [
-    "X:\\CRSP Databases",
-    "X:\\CRSP Fieldwork 2020",
-    "X:\\CRSP Fieldwork 2021",
-    "X:\\CRSP Fieldwork 2022",
-]
+# source_directories = [
+#     "X:\\CRSP Databases",
+#     "X:\\CRSP Fieldwork 2020",
+#     "X:\\CRSP Fieldwork 2021",
+#     "X:\\CRSP Fieldwork 2022",
+# ]
 
 # Use current tree for testing
-# source_directories = [os.getcwd()]
+source_directories = [os.getcwd()]
 
 # db_file_suffix = (".accdb", ".mdb.old", ".mdb", ".DBF") # Include old files
 
@@ -198,6 +198,7 @@ db_path = df_databases.iloc[db_index]["file_path"]
 
 my_conn, my_cursor = odbc_connect_ms_access(db_path)
 
+# %% Close test connection
 my_conn.close()
 
 # %% Index extraction testing
