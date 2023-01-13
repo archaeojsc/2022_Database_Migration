@@ -1,9 +1,10 @@
 # %% Imports
 
+import pyodbc
+import pandas as pd
 import os
 from collections import defaultdict
-import pandas as pd
-import pyodbc
+import hashlib
 
 # %% Function to retrieve list of databases
 
@@ -154,17 +155,18 @@ def extract_ms_access_db_schema(file_path: str):
 
     return dict(db_table_defs)
 
+
 # %% Function to return pandas df of table columns definitions
 
 
-def extract_db_table_def_df(id:str, db: dict):
+def extract_db_table_def_df(id: str, db: dict):
     """
     Create pandas data frame of database table definitions
 
     Parameters
     ----------
     id : str
-        Unique database identifier 
+        Unique database identifier
     db : dict
         Dictionary containing database schema information retrieved from
         extract_ms_access_db_schema
@@ -184,7 +186,7 @@ def extract_db_table_def_df(id:str, db: dict):
     for tab in db_tables:
         new_def = pd.Series(
             {
-                "db_id":id
+                "db_id": id,
                 "db_table": tab,
                 "db_table_columns": [col for col in db[tab]["column_defs"].keys()],
                 "db_table_primary_key": [
@@ -199,5 +201,3 @@ def extract_db_table_def_df(id:str, db: dict):
         )
 
     return df_table_def
-
-

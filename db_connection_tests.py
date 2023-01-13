@@ -30,7 +30,7 @@ def get_db_files(top_dir: str, file_ext):
     """
 
     df_files = pd.DataFrame(
-        columns=["db_identifier", "file_name", "file_dir", "file_path"]
+        columns=["db_identifier", "file_ext", "file_name", "file_dir", "file_path"]
     )
 
     for root, _, files in os.walk(top_dir):
@@ -39,6 +39,7 @@ def get_db_files(top_dir: str, file_ext):
                 new_row = pd.Series(
                     {
                         "file_name": file,
+                        "file_ext": os.path.splitext(file)[-1].lower(),
                         "file_dir": root,
                         "file_path": os.path.join(root, file),
                         "db_identifier": hashlib.md5(
@@ -58,22 +59,17 @@ def get_db_files(top_dir: str, file_ext):
 # %% Get file paths for all database files in directories
 
 # CRSP directories for storing project databases
-source_directories = [
-    "X:\\CRSP Databases",
-    "X:\\CRSP Fieldwork 2020",
-    "X:\\CRSP Fieldwork 2021",
-    "X:\\CRSP Fieldwork 2022",
-]
+# source_directories = [
+#     "X:\\CRSP Databases",
+#     "X:\\CRSP Fieldwork 2020",
+#     "X:\\CRSP Fieldwork 2021",
+#     "X:\\CRSP Fieldwork 2022",
+# ]
 
 # Use current tree for testing
-# source_directories = [os.getcwd()]
+source_directories = [os.getcwd()]
 
-db_file_suffix = (
-    ".accdb",
-    ".mdb.old",
-    ".mdb",
-    ".DBF"
-    ) # Include old files
+db_file_suffix = (".accdb", ".mdb.old", ".mdb", ".DBF")  # Include old files
 
 # db_file_suffix = (".accdb", ".mdb")  # Only include active files
 
@@ -145,6 +141,9 @@ def extract_ms_access_db_schema(file_path: str):
     dict
         dictionary of table definitions
     """
+
+    if not file_path.endswith((".accdb", ".mdb")):
+        return  # {"None": os.path.splitext(file_path)[-1].lower()}
 
     db_table_defs = defaultdict(dict)
 
@@ -241,26 +240,24 @@ my_conn.close()
 
 # Choose random db from file list
 
-db_index = random.randint(0, len(df_databases) - 1)
-
-test_db = df_databases.iloc[db_index]["file_path"]
+test_db = df_databases.sample(n=1)["file_path"].item()
 
 test_db_schema = extract_ms_access_db_schema(test_db)
 
 # List of tables
-test_db_tables = [tbl for tbl in test_db_schema.keys()]
+df_db_tables = [tbl for tbl in test_db_schema.keys()]
 
 # %% Function to return pandas df of table columns definitions
 
 
-def extract_db_table_def_df(id:str, db: dict):
+def extract_db_table_def_df(id: str, db: dict):
     """
     Create pandas data frame of database table definitions
 
     Parameters
     ----------
     id : str
-        Unique database identifier 
+        Unique database identifier
     db : dict
         Dictionary containing database schema information retrieved from
         extract_ms_access_db_schema
@@ -271,16 +268,14 @@ def extract_db_table_def_df(id:str, db: dict):
         Returns pandas data frame of database identifier, table name, list of
         unique indices, and list of table columns
     """
-    df_table_def = pd.DataFrame(
-        columns=["db_id", "db_table", "db_table_primary_key", "db_table_columns"]
-    )
+    df_table_def = pd.DataFrame()
 
     db_tables = [t for t in db.keys()]
 
     for tab in db_tables:
         new_def = pd.Series(
             {
-                "db_id":id
+                "db_id": id,
                 "db_table": tab,
                 "db_table_columns": [col for col in db[tab]["column_defs"].keys()],
                 "db_table_primary_key": [
@@ -307,36 +302,52 @@ db_pull_test = {
 
 # %%
 
-test_db_tables = pd.DataFrame(
-    [[db, [k for k in db_pull_test[db].keys()]] for db in db_pull_test.keys()],
+df_db_tables = pd.DataFrame(
+    [
+        [db, [k for k in db_pull_test[db].keys()]]
+        for db in db_pull_test.keys()
+        if db_pull_test[db]
+    ],
     columns=["db_id", "db_tables"],
 )
 # %%
 
 unique_table_schema = pd.Series(
-    [list(x) for x in set(tuple(x) for x in test_db_tables["db_tables"])],
-    name="tale_schema",
+    [list(x) for x in set(tuple(x) for x in df_db_tables["db_tables"])],
+    name="table_schema",
 )
 
-# %% Get counts of unique table schema retrieved from
-# extract_ms_access_db_schema
+# %% Get counts of unique table schema
 
 table_schema_counts = (
-    test_db_tables["db_tables"]
+    df_db_tables["db_tables"]
     .value_counts()
     .rename_axis("table_schema")
     .reset_index(name="schema_count")
 )
 
-# %% Test connecting to dbf
+# %% testing build table defs
 
+df_db_table_defs = pd.DataFrame()
 
-dbf_path = df_databases[df_databases["file_name"].str.endswith(".DBF")].sample(n=1)["file_path"].item()
+for db in df_db_tables["db_id"]:
+    if db_pull_test[db]:
+        df_db_table_defs = pd.concat(
+            [df_db_table_defs, extract_db_table_def_df(db, db_pull_test[db])],
+            ignore_index=True,
+        )
 
 # %%
-from dbfread import DBF
 
-dbf = DBF(dbf_path, ignore_missing_memofile=True)
+table_def_counts = pd.DataFrame(columns=["db_table"])
 
-df_dbf = pd.DataFrame(iter(dbf))
+for table in set(df_db_table_defs["db_table"]):
+    new_def_counts = (
+        df_db_table_defs[df_db_table_defs["db_table"] == table]["db_table_columns"]
+        .value_counts()
+        .rename_axis("table_def")
+        .reset_index(name="def_count")
+    )
+    new_def_counts["db_table"] = table
+    table_def_counts = pd.concat([table_def_counts, new_def_counts], ignore_index=True)
 # %%
