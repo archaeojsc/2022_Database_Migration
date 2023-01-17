@@ -59,19 +59,19 @@ def get_db_files(top_dir: str, file_ext):
 # %% Get file paths for all database files in directories
 
 # CRSP directories for storing project databases
-# source_directories = [
-#     "X:\\CRSP Databases",
-#     "X:\\CRSP Fieldwork 2020",
-#     "X:\\CRSP Fieldwork 2021",
-#     "X:\\CRSP Fieldwork 2022",
-# ]
+source_directories = [
+    "X:\\CRSP Databases",
+    "X:\\CRSP Fieldwork 2020",
+    "X:\\CRSP Fieldwork 2021",
+    "X:\\CRSP Fieldwork 2022",
+]
 
 # Use current tree for testing
-source_directories = [os.getcwd()]
+# source_directories = [os.getcwd()]
 
-db_file_suffix = (".accdb", ".mdb.old", ".mdb", ".DBF")  # Include old files
+# db_file_suffix = (".accdb", ".mdb.old", ".mdb", ".DBF")  # Include old files
 
-# db_file_suffix = (".accdb", ".mdb")  # Only include active files
+db_file_suffix = (".accdb", ".mdb")  # Only include active files
 
 df_databases = pd.DataFrame()
 
@@ -196,9 +196,7 @@ def extract_ms_access_db_schema(file_path: str):
 # "C:\\Users\\Scott\\Documents\\2022_Database_Migration\\1BOW.00.101 Prattsville
 # (10-2014).accdb"
 
-db_index = random.randint(0, len(df_databases) - 1)
-
-db_path = df_databases.iloc[db_index]["file_path"]
+db_path = df_databases.sample(n=1)["file_path"].item()
 
 my_conn, my_cursor = odbc_connect_ms_access(db_path)
 
@@ -277,7 +275,9 @@ def extract_db_table_def_df(id: str, db: dict):
             {
                 "db_id": id,
                 "db_table": tab,
-                "db_table_columns": [col for col in db[tab]["column_defs"].keys()],
+                "db_table_columns": tuple(
+                    [col for col in db[tab]["column_defs"].keys()]
+                ),
                 "db_table_primary_key": [
                     v
                     for k, v in db[tab]["unique_indices"].items()
@@ -351,3 +351,9 @@ for table in set(df_db_table_defs["db_table"]):
     new_def_counts["db_table"] = table
     table_def_counts = pd.concat([table_def_counts, new_def_counts], ignore_index=True)
 # %%
+
+test = table_def_counts.groupby(["db_table"])["table_def"].nunique()
+
+table_def_counts.groupby(["db_table"]).agg({"def_count": sum})["def_count"].sort_values(
+    ascending=False
+).head(20)

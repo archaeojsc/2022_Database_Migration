@@ -35,7 +35,7 @@ due to updating MS Access versions, and does not include `*.mdb.old`[^fn1] or
 2,234 files.
 
 [^fn1]: Archive copies of databases that were updated to new versions?
-[^fn2]: Old FoxPro databases.
+[^fn2]: Old FoxPro databases, typically flat-file database structure.
 
 There are 89 databases with unique table structures. Most of these, however,
 appear to be based on the most common schema. These seem to be modified versions
@@ -43,6 +43,10 @@ of a template database, with the addition of either specialized or redundant
 (copied?) tables. A relatively small portion of the databases are obviously
 special-purpose applications, and some appear to be attempts to update older
 DBase or FoxPro databases to MS Access.
+
+Another common category appear to be subsets of other databases, which are used
+to transfer field collection data to external curatorial databases. These would
+need to be excluded since the duplicate other records.
 
 The vast majority of the databases follow some version of the table structure:  
 
@@ -53,6 +57,12 @@ The vast majority of the databases follow some version of the table structure:
   into *unit* and *level* sub-tables)
 * Artifact Catalog table (sometimes split into *site* and *non-site* catalogs)
 * Code List utility lookup table (`CODELIST`, `CodeList`, or `Codelist`)
+
+These are consistent with the overall template in use for the past 15 years,
+with some notable variations. Aside from variable table naming conventions,
+these tables often contain variable field definitions. For example, the most
+common table `Provenience` occurs in 821 of the files but has 88 distinct field
+definitions.
 
 ### Next Steps
 
