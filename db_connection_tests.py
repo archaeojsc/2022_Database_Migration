@@ -357,3 +357,7 @@ test = table_def_counts.groupby(["db_table"])["table_def"].nunique()
 table_def_counts.groupby(["db_table"]).agg({"def_count": sum})["def_count"].sort_values(
     ascending=False
 ).head(20)
+
+table_def_counts[table_def_counts["db_table"].str.contains("Catalog")].groupby(
+    ["db_table"]
+).agg({"def_count": sum})["def_count"].sort_values(ascending=False).head(20)
