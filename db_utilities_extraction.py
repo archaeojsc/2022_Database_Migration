@@ -115,6 +115,9 @@ def extract_ms_access_db_schema(file_path: str):
         dictionary of table definitions
     """
 
+    if not file_path.endswith((".accdb", ".mdb")):
+        return
+
     db_table_defs = defaultdict(dict)
 
     db_conn, db_cursor = odbc_connect_ms_access(file_path)
@@ -177,9 +180,7 @@ def extract_db_table_def_df(id: str, db: dict):
         Returns pandas data frame of database identifier, table name, list of
         unique indices, and list of table columns
     """
-    df_table_def = pd.DataFrame(
-        columns=["db_id", "db_table", "db_table_primary_key", "db_table_columns"]
-    )
+    df_table_def = pd.DataFrame()
 
     db_tables = [t for t in db.keys()]
 
@@ -188,12 +189,16 @@ def extract_db_table_def_df(id: str, db: dict):
             {
                 "db_id": id,
                 "db_table": tab,
-                "db_table_columns": [col for col in db[tab]["column_defs"].keys()],
-                "db_table_primary_key": [
-                    v
-                    for k, v in db[tab]["unique_indices"].items()
-                    if (k == "PrimaryKey")
-                ],
+                "db_table_columns": tuple(
+                    [col for col in db[tab]["column_defs"].keys()]
+                ),
+                "db_table_primary_key": tuple(
+                    [
+                        v
+                        for k, v in db[tab]["unique_indices"].items()
+                        if (k == "PrimaryKey")
+                    ]
+                ),
             }
         )
         df_table_def = pd.concat(

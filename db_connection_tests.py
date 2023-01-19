@@ -143,18 +143,20 @@ def extract_ms_access_db_schema(file_path: str):
     """
 
     if not file_path.endswith((".accdb", ".mdb")):
-        return  # {"None": os.path.splitext(file_path)[-1].lower()}
+        return
 
     db_table_defs = defaultdict(dict)
 
     db_conn, db_cursor = odbc_connect_ms_access(file_path)
 
-    db_table_names = [
-        t.table_name
-        for t in db_cursor.tables(tableType="TABLE")
-        # Exclude MS Access generated tables
-        if not (t.table_name in ["Paste Errors", "Switchboard Items"])
-    ]
+    db_table_names = tuple(
+        [
+            t.table_name
+            for t in db_cursor.tables(tableType="TABLE")
+            # Exclude MS Access generated tables
+            if not (t.table_name in ["Paste Errors", "Switchboard Items"])
+        ]
+    )
 
     for curr_table in db_table_names:
         db_table_defs[curr_table] = {}
@@ -238,12 +240,12 @@ my_conn.close()
 
 # Choose random db from file list
 
-test_db = df_databases.sample(n=1)["file_path"].item()
+# test_db = df_databases.sample(n=1)["file_path"].item()
 
-test_db_schema = extract_ms_access_db_schema(test_db)
+# test_db_schema = extract_ms_access_db_schema(test_db)
 
 # List of tables
-df_db_tables = [tbl for tbl in test_db_schema.keys()]
+# df_db_tables = [tbl for tbl in test_db_schema.keys()]
 
 # %% Function to return pandas df of table columns definitions
 
@@ -278,11 +280,9 @@ def extract_db_table_def_df(id: str, db: dict):
                 "db_table_columns": tuple(
                     [col for col in db[tab]["column_defs"].keys()]
                 ),
-                "db_table_primary_key": [
-                    v
-                    for k, v in db[tab]["unique_indices"].items()
-                    if (k == "PrimaryKey")
-                ],
+                "db_table_primary_key": db[tab]["unique_indices"]["PrimaryKey"]
+                if "PrimaryKey" in db[tab]["unique_indices"].keys()
+                else None,
             }
         )
         df_table_def = pd.concat(
@@ -304,12 +304,13 @@ db_pull_test = {
 
 df_db_tables = pd.DataFrame(
     [
-        [db, [k for k in db_pull_test[db].keys()]]
+        [db, tuple([k for k in db_pull_test[db].keys()])]
         for db in db_pull_test.keys()
         if db_pull_test[db]
     ],
     columns=["db_id", "db_tables"],
 )
+
 # %%
 
 unique_table_schema = pd.Series(
@@ -326,6 +327,7 @@ table_schema_counts = (
     .reset_index(name="schema_count")
 )
 
+
 # %% testing build table defs
 
 df_db_table_defs = pd.DataFrame()
@@ -341,7 +343,7 @@ for db in df_db_tables["db_id"]:
 
 table_def_counts = pd.DataFrame(columns=["db_table"])
 
-for table in set(df_db_table_defs["db_table"]):
+for table in df_db_table_defs["db_table"].unique():
     new_def_counts = (
         df_db_table_defs[df_db_table_defs["db_table"] == table]["db_table_columns"]
         .value_counts()
@@ -350,14 +352,53 @@ for table in set(df_db_table_defs["db_table"]):
     )
     new_def_counts["db_table"] = table
     table_def_counts = pd.concat([table_def_counts, new_def_counts], ignore_index=True)
+
 # %%
 
-test = table_def_counts.groupby(["db_table"])["table_def"].nunique()
+table_def_counts.groupby(["db_table"])["table_def"].nunique().nlargest(20)
 
-table_def_counts.groupby(["db_table"]).agg({"def_count": sum})["def_count"].sort_values(
-    ascending=False
-).head(20)
+# %%
 
-table_def_counts[table_def_counts["db_table"].str.contains("Catalog")].groupby(
-    ["db_table"]
-).agg({"def_count": sum})["def_count"].sort_values(ascending=False).head(20)
+table_def_counts.groupby(["db_table"]).agg({"def_count": sum})["def_count"].nlargest(20)
+
+
+# %%
+
+table_def_counts[table_def_counts["db_table"].str.contains("Provenience")].groupby(
+    ["db_table"], group_keys=False
+).agg({"def_count": sum})["def_count"].sort_values(ascending=False)
+
+# %%
+
+
+# for table in df_db_table_defs["db_table"].unique():
+
+
+# %%
+pk = [
+    "Project_Num",
+    "Phase",
+    "BagNumber",
+    "Item",
+]
+col = "Project_Num"
+if any(col in k for k in pk):
+    print("yes")
+else:
+    print("No")
+
+# %%
+
+test = df_db_table_defs.explode(column="db_table_columns").reset_index(drop=True)
+
+
+# %%
+
+test["is_primary_key"] = test.apply(
+    lambda x: x["db_table_columns"] in x["db_table_primary_key"]
+    if x["db_table_primary_key"] is not None
+    else False,
+    axis=1,
+)
+
+# %%
