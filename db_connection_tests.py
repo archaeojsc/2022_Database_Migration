@@ -202,7 +202,7 @@ db_path = df_databases.sample(n=1)["file_path"].item()
 
 my_conn, my_cursor = odbc_connect_ms_access(db_path)
 
-# %% Close test connection
+# %% Close table_def_fields connection
 my_conn.close()
 
 # %% Index extraction testing
@@ -355,7 +355,11 @@ for table in df_db_table_defs["db_table"].unique():
 
 # %%
 
-table_def_counts.groupby(["db_table"])["table_def"].nunique().nlargest(20)
+unique_table_defs = (
+    table_def_counts.groupby(["db_table"])["table_def"]
+    .nunique()
+    .sort_values(ascending=False)
+)
 
 # %%
 
@@ -364,37 +368,23 @@ table_def_counts.groupby(["db_table"]).agg({"def_count": sum})["def_count"].nlar
 
 # %%
 
-table_def_counts[table_def_counts["db_table"].str.contains("Provenience")].groupby(
+table_def_counts[table_def_counts["db_table"].str.contains("Site")].groupby(
     ["db_table"], group_keys=False
 ).agg({"def_count": sum})["def_count"].sort_values(ascending=False)
 
 # %%
 
+table_def_counts[table_def_counts["db_table"].str.contains("Provenience")].groupby(
+    ["db_table"], group_keys=False
+)["table_def"].nunique().sort_values(ascending=False)
 
-# for table in df_db_table_defs["db_table"].unique():
+# %% Create dataframe of tables and fields
 
+table_def_fields = df_db_table_defs.explode(column="db_table_columns").reset_index(
+    drop=True
+)
 
-# %%
-pk = [
-    "Project_Num",
-    "Phase",
-    "BagNumber",
-    "Item",
-]
-col = "Project_Num"
-if any(col in k for k in pk):
-    print("yes")
-else:
-    print("No")
-
-# %%
-
-test = df_db_table_defs.explode(column="db_table_columns").reset_index(drop=True)
-
-
-# %%
-
-test["is_primary_key"] = test.apply(
+table_def_fields["is_primary_key"] = table_def_fields.apply(
     lambda x: x["db_table_columns"] in x["db_table_primary_key"]
     if x["db_table_primary_key"] is not None
     else False,
