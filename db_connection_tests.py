@@ -1,11 +1,18 @@
 # %% Imports
 
-import pyodbc
-import pandas as pd
-import os
-from collections import defaultdict
-import random
 import hashlib
+import os
+
+from collections import defaultdict
+from typing import Tuple, Any, Dict
+from pathlib import Path
+
+import pandas as pd
+import pyodbc
+
+# import random
+
+
 
 # %% Function to retrieve list of databases
 
@@ -13,47 +20,37 @@ import hashlib
 def get_db_files(top_dir: str, file_ext):
     """
     Return dataframe of information for files with specified extensions found
-    under starting directory.
-
-    Parameters
-    ----------
-    top_dir : str
-        directory to begin search
-    file_ext : list, tuple, or str
-        file extensions to include in search
-
-    Returns
-    -------
-    dataframe
-        pandas dataframe with id hash index, file name, directory string, and full absolute
-        path
+    recursively under starting directory.
     """
 
-    df_files = pd.DataFrame(
-        columns=["db_identifier", "file_ext", "file_name", "file_dir", "file_path"]
-    )
+    if isinstance(file_ext, str):
+        file_ext = (file_ext.lower(),)
+    else:
+        file_ext = tuple(ext.lower() for ext in file_ext)
+
+    rows = []
 
     for root, _, files in os.walk(top_dir):
         for file in files:
-            if file.endswith(file_ext):
-                new_row = pd.Series(
+            if file.lower().endswith(file_ext):
+                full_path = os.path.join(root, file)
+                rows.append(
                     {
                         "file_name": file,
                         "file_ext": os.path.splitext(file)[-1].lower(),
                         "file_dir": root,
-                        "file_path": os.path.join(root, file),
+                        "file_path": full_path,
                         "db_identifier": hashlib.md5(
-                            os.path.join(root, file).encode(
-                                encoding="UTF-8", errors="strict"
-                            )
+                            full_path.encode("utf-8")
                         ).hexdigest(),
                     }
                 )
-                df_files = pd.concat(
-                    [df_files, new_row.to_frame().T], ignore_index=True
-                )
 
-    return df_files
+    return pd.DataFrame(
+        rows,
+        columns=["db_identifier", "file_ext", "file_name", "file_dir", "file_path"],
+    )
+
 
 
 # %% Get file paths for all database files in directories
@@ -61,9 +58,10 @@ def get_db_files(top_dir: str, file_ext):
 # CRSP directories for storing project databases
 source_directories = [
     "X:\\CRSP Databases",
-    "X:\\CRSP Fieldwork 2020",
-    "X:\\CRSP Fieldwork 2021",
-    "X:\\CRSP Fieldwork 2022",
+    "X:\\CRSP Fieldwork 2020 to 2022",
+    "X:\\CRSP Fieldwork 2023",
+    "X:\\CRSP Fieldwork 2024",
+    "X:\\CRSP Fieldwork 2025"
 ]
 
 # Use current tree for testing
@@ -71,7 +69,7 @@ source_directories = [
 
 # db_file_suffix = (".accdb", ".mdb.old", ".mdb", ".DBF")  # Include old files
 
-db_file_suffix = (".accdb", ".mdb")  # Only include active files
+db_file_suffix = (".accdb")  # Only include active files
 
 df_databases = pd.DataFrame()
 
@@ -84,115 +82,68 @@ for src in source_directories:
 # %% Function to open ODBC database and return connection and cursor
 
 
-def odbc_connect_ms_access(dbq_path: str):
+def _decode_bad_utf16(raw: bytes) -> str:
     """
-    Returns pyodbc connection and cursor for a Microsoft Access database.
+    Workaround for MS Access ODBC UTF-16LE truncation issues.
+    """
+    s = raw.decode("utf-16le", errors="ignore")
+    null_pos = s.find("\x00")
+    return s if null_pos == -1 else s[:null_pos]
+
+
+def odbc_connect_ms_access(dbq_path: str) -> Tuple[pyodbc.Connection, pyodbc.Cursor]:
+    """
+    Returns a pyodbc connection and cursor for a Microsoft Access database.
 
     Parameters
     ----------
     dbq_path : str
-        full absolute file path of MS Access database
+        Absolute file path to a .mdb or .accdb database
 
     Returns
     -------
-    obj, obj
-        odbc connection, odbc connection cursor
+    (pyodbc.Connection, pyodbc.Cursor)
     """
 
-    # Required Microsoft Access ODBC driver
-    odbc_driver = "{Microsoft Access Driver (*.mdb, *.accdb)}"
+    if not isinstance(dbq_path, str) or not dbq_path.strip():
+        raise ValueError("dbq_path must be a non-empty string")
 
-    # ODBC connection string
-    conn_str = rf"DRIVER={odbc_driver};" rf"DBQ={dbq_path};"
+    if not os.path.isfile(dbq_path):
+        raise FileNotFoundError(f"Access database not found: {dbq_path}")
 
-    # Open ODBC connection and cursor
-    conn = pyodbc.connect(conn_str)
-    cur = conn.cursor()
+    if not dbq_path.lower().endswith((".mdb", ".accdb")):
+        raise ValueError("Unsupported file type (expected .mdb or .accdb)")
 
-    # Workaround for MS Access ODBC "utf-16-le" error
-    def decode_bad_utf16(raw_string):
-        s = raw_string.decode("utf-16le", "ignore")
-        try:
-            n = s.index("\u0000")
-            s = s[:n]  # null terminator
-        except:
-            pass
-        return s
+    drivers = [d for d in pyodbc.drivers() if "Access Driver" in d]
+    if not drivers:
+        raise RuntimeError(
+            "Microsoft Access ODBC driver not found. "
+            "Install the Microsoft Access Database Engine."
+        )
 
-    conn.add_output_converter(pyodbc.SQL_WVARCHAR, decode_bad_utf16)
+    driver = drivers[-1]  # prefer newest driver
 
-    return conn, cur
-
-
-# %% Function to extract database schema
-
-
-def extract_ms_access_db_schema(file_path: str):
-    """
-    Extracts table schema from Microsoft Access database using pyodbc.
-
-    Parameters
-    ----------
-    file_path : str
-        full absolute file path of MS Access database
-
-    Returns
-    -------
-    dict
-        dictionary of table definitions
-    """
-
-    if not file_path.endswith((".accdb", ".mdb")):
-        return
-
-    db_table_defs = defaultdict(dict)
-
-    db_conn, db_cursor = odbc_connect_ms_access(file_path)
-
-    db_table_names = tuple(
-        [
-            t.table_name
-            for t in db_cursor.tables(tableType="TABLE")
-            # Exclude MS Access generated tables
-            if not (t.table_name in ["Paste Errors", "Switchboard Items"])
-        ]
+    conn_str = (
+        f"DRIVER={driver};"
+        f"DBQ={dbq_path};"
+        "ExtendedAnsiSQL=1;"
     )
 
-    for curr_table in db_table_names:
-        db_table_defs[curr_table] = {}
+    try:
+        conn = pyodbc.connect(conn_str, autocommit=False)
+    except pyodbc.Error as exc:
+        raise ConnectionError("Failed to connect to Access database") from exc
 
-        db_table_defs[curr_table]["unique_indices"] = {}
+    # Register UTF-16 workaround
+    conn.add_output_converter(pyodbc.SQL_WVARCHAR, _decode_bad_utf16)
 
-        for s in db_cursor.statistics(table=curr_table, unique=True):
-            if s.index_name:
-                if s.index_name in db_table_defs[curr_table]["unique_indices"]:
-                    db_table_defs[curr_table]["unique_indices"][s.index_name].append(
-                        s.column_name
-                    )
-                else:
-                    db_table_defs[curr_table]["unique_indices"][s.index_name] = [
-                        s.column_name
-                    ]
-
-        db_table_defs[curr_table]["column_defs"] = {}
-
-        for col in db_cursor.columns(table=curr_table):
-            db_table_defs[curr_table]["column_defs"][col.column_name] = {
-                "data_type_name": col.type_name,
-                "sql_data_type": col.sql_data_type,
-                "is_nullable": col.is_nullable,
-            }
-
-    db_conn.close()
-
-    return dict(db_table_defs)
-
+    return conn, conn.cursor()
 
 # %% Testing connection to database
 
 
 # Testing path for office workstation
-# db_path = "C:\\Users\\scardina\\Documents\\Projects\\Active Projects\\2022_Database_Migration\\1BOW.00.101 Prattsville (10-2014).accdb"
+# db_path = "C:\\Users\\scardina\\OneDrive - New York State Education Department\\Documents\\Projects\\CRSP_Access_Database_Migration\\1BOW.00.101 Prattsville (10-2014).accdb"
 
 # Testing path for home workstation db_path =
 # "C:\\Users\\Scott\\Documents\\2022_Database_Migration\\1BOW.00.101 Prattsville
@@ -202,8 +153,182 @@ db_path = df_databases.sample(n=1)["file_path"].item()
 
 my_conn, my_cursor = odbc_connect_ms_access(db_path)
 
-# %% Close table_def_fields connection
+my_cursor.close()
 my_conn.close()
+
+
+# %% Function to extract database schema
+
+
+class AccessSchemaError(RuntimeError):
+    """Raised when schema extraction from MS Access fails."""
+
+
+def extract_ms_access_db_schema(file_path: str) -> Dict[str, Any]:
+    """
+    Extract table schema from a Microsoft Access database using pyodbc,
+    including primary key detection with multiple fallback strategies.
+
+    Parameters
+    ----------
+    file_path : str
+        Absolute path to .mdb or .accdb file
+
+    Returns
+    -------
+    dict
+        Schema definition keyed by table name
+    """
+    path = Path(file_path)
+
+    if path.suffix.lower() not in {".mdb", ".accdb"}:
+        raise ValueError("file_path must reference a .mdb or .accdb file")
+
+    if not path.exists():
+        raise FileNotFoundError(f"Database file not found: {path}")
+
+    schema: Dict[str, Any] = {}
+
+    conn = None
+    cursor = None
+
+    try:
+        conn, cursor = odbc_connect_ms_access(str(path))
+
+        excluded_prefixes = ("MSys", "USys")
+        excluded_exact = {"Paste Errors", "Switchboard Items"}
+
+        try:
+            tables = [
+                t.table_name
+                for t in cursor.tables(tableType="TABLE")
+                if not (
+                    t.table_name in excluded_exact
+                    or t.table_name.startswith(excluded_prefixes)
+                )
+            ]
+        except pyodbc.Error as e:
+            raise AccessSchemaError("Failed to enumerate tables") from e
+
+        for table in tables:
+            table_def = {
+                "primary_key": {
+                    "columns": [],
+                    "source": None,
+                },
+                "unique_indices": defaultdict(list),
+                "column_defs": {},
+            }
+
+            # -------------------------
+            # COLUMN METADATA
+            # -------------------------
+            try:
+                for col in cursor.columns(table=table):
+                    table_def["column_defs"][col.column_name] = {
+                        "data_type_name": col.type_name,
+                        "sql_data_type": col.sql_data_type,
+                        "is_nullable": bool(col.is_nullable),
+                        "column_size": col.column_size,
+                        "decimal_digits": col.decimal_digits,
+                    }
+            except pyodbc.Error as e:
+                raise AccessSchemaError(
+                    f"Failed to extract columns for table '{table}'"
+                ) from e
+
+            # -------------------------
+            # PRIMARY KEY – STRATEGY 1
+            # cursor.primaryKeys()
+            # -------------------------
+            try:
+                pk_cols = [
+                    pk.column_name
+                    for pk in cursor.primaryKeys(table=table)
+                ]
+                if pk_cols:
+                    table_def["primary_key"] = {
+                        "columns": pk_cols,
+                        "source": "primaryKeys",
+                    }
+            except pyodbc.Error:
+                # Driver does not support this reliably
+                pass
+
+            # -------------------------
+            # INDEX METADATA
+            # -------------------------
+            try:
+                for stat in cursor.statistics(table=table):
+                    if not stat.index_name:
+                        continue
+
+                    if stat.non_unique == 0:
+                        table_def["unique_indices"][stat.index_name].append(
+                            stat.column_name
+                        )
+            except pyodbc.Error as e:
+                raise AccessSchemaError(
+                    f"Failed to extract index metadata for table '{table}'"
+                ) from e
+
+            table_def["unique_indices"] = dict(table_def["unique_indices"])
+
+            # -------------------------
+            # PRIMARY KEY – STRATEGY 2
+            # Unique index fallback
+            # -------------------------
+            if not table_def["primary_key"]["columns"]:
+                for idx_name, cols in table_def["unique_indices"].items():
+                    # Access often names PK index "PrimaryKey" or similar
+                    if idx_name.lower().startswith("primary"):
+                        table_def["primary_key"] = {
+                            "columns": cols,
+                            "source": "unique_index",
+                        }
+                        break
+
+            # -------------------------
+            # PRIMARY KEY – STRATEGY 3
+            # Heuristic inference
+            # -------------------------
+            if not table_def["primary_key"]["columns"]:
+                candidates: List[str] = []
+
+                for col_name, col_def in table_def["column_defs"].items():
+                    if not col_def["is_nullable"]:
+                        lname = col_name.lower()
+                        if lname == "id" or lname == f"{table.lower()}_id":
+                            candidates.append(col_name)
+
+                if len(candidates) == 1:
+                    table_def["primary_key"] = {
+                        "columns": candidates,
+                        "source": "heuristic",
+                    }
+
+            schema[table] = table_def
+
+    except pyodbc.Error as e:
+        raise AccessSchemaError(
+            f"ODBC error while reading Access schema: {e}"
+        ) from e
+
+    finally:
+        if cursor is not None:
+            try:
+                cursor.close()
+            except pyodbc.Error:
+                pass
+
+        if conn is not None:
+            try:
+                conn.close()
+            except pyodbc.Error:
+                pass
+
+    return schema
+
 
 # %% Index extraction testing
 
@@ -240,12 +365,12 @@ my_conn.close()
 
 # Choose random db from file list
 
-# test_db = df_databases.sample(n=1)["file_path"].item()
+test_db = df_databases.sample(n=1)["file_path"].item()
 
-# test_db_schema = extract_ms_access_db_schema(test_db)
+test_db_schema = extract_ms_access_db_schema(test_db)
 
 # List of tables
-# df_db_tables = [tbl for tbl in test_db_schema.keys()]
+df_db_tables = [tbl for tbl in test_db_schema.keys()]
 
 # %% Function to return pandas df of table columns definitions
 
