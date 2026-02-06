@@ -69,7 +69,7 @@ source_directories = [
 
 # db_file_suffix = (".accdb", ".mdb.old", ".mdb", ".DBF")  # Include old files
 
-db_file_suffix = (".accdb")  # Only include active files
+db_file_suffix = ".accdb"  # Only include active files
 
 df_databases = pd.DataFrame()
 
@@ -121,7 +121,7 @@ def odbc_connect_ms_access(dbq_path: str) -> Tuple[pyodbc.Connection, pyodbc.Cur
             "Install the Microsoft Access Database Engine."
         )
 
-    driver = drivers[-1]  # prefer newest driver
+    driver = drivers[-1]  # prefer the newest driver
 
     conn_str = (
         f"DRIVER={driver};"
