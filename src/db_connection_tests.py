@@ -4,8 +4,8 @@ import hashlib
 import os
 
 from collections import defaultdict
-from typing import Tuple, Any, Dict
 from pathlib import Path
+from typing import Any, Dict, Tuple
 
 import pandas as pd
 import pyodbc
@@ -164,170 +164,336 @@ class AccessSchemaError(RuntimeError):
     """Raised when schema extraction from MS Access fails."""
 
 
+ACCESS_TYPE_MAP = {
+    "byte": "smallint",
+    "short": "smallint",
+    "long": "integer",
+    "integer": "integer",
+    "counter": "integer",
+    "single": "real",
+    "double": "double precision",
+    "currency": "numeric",
+    "yesno": "boolean",
+    "datetime": "timestamp",
+    "char": "char",
+    "varchar": "varchar",
+    "text": "varchar",
+    "memo": "text",
+    "longtext": "text",
+    "binary": "bytea",
+    "varbinary": "bytea",
+    "oleobject": "bytea",
+}
+
+
 def extract_ms_access_db_schema(file_path: str) -> Dict[str, Any]:
     """
-    Extract table schema from a Microsoft Access database using pyodbc,
-    including primary key detection with multiple fallback strategies.
-
-    Parameters
-    ----------
-    file_path : str
-        Absolute path to .mdb or .accdb file
-
-    Returns
-    -------
-    dict
-        Schema definition keyed by table name
+    Extract Microsoft Access schema directly into a canonical,
+    database-agnostic Schema IR suitable for migration tooling.
     """
+
     path = Path(file_path)
 
+    # ---------------- Validation ----------------
     if path.suffix.lower() not in {".mdb", ".accdb"}:
-        raise ValueError("file_path must reference a .mdb or .accdb file")
+        raise ValueError("file_path must be a .mdb or .accdb file")
 
     if not path.exists():
         raise FileNotFoundError(f"Database file not found: {path}")
 
-    schema: Dict[str, Any] = {}
+    schema_ir: Dict[str, Any] = {"tables": {}}
 
-    conn = None
-    cursor = None
+    db_conn = None
+    db_cursor = None
 
     try:
-        conn, cursor = odbc_connect_ms_access(str(path))
-
-        excluded_prefixes = ("MSys", "USys")
-        excluded_exact = {"Paste Errors", "Switchboard Items"}
-
+        # ---------------- Connection ----------------
         try:
-            tables = [
-                t.table_name
-                for t in cursor.tables(tableType="TABLE")
-                if not (
-                    t.table_name in excluded_exact
-                    or t.table_name.startswith(excluded_prefixes)
-                )
-            ]
-        except pyodbc.Error as e:
-            raise AccessSchemaError("Failed to enumerate tables") from e
+            db_conn, db_cursor = odbc_connect_ms_access(str(path))
+        except pyodbc.Error as exc:
+            raise ConnectionError(
+                f"Unable to connect to Access database: {path}"
+            ) from exc
 
-        for table in tables:
+        # ---------------- Table discovery ----------------
+        excluded_exact = {"paste errors", "switchboard items"}
+        excluded_prefixes = ("msys", "usys")
+
+        tables = [
+            t.table_name
+            for t in db_cursor.tables(tableType="TABLE")
+            if t.table_name
+            and t.table_name.lower() not in excluded_exact
+            and not t.table_name.lower().startswith(excluded_prefixes)
+        ]
+
+        for raw_table in tables:
+            table = raw_table.lower()
+
             table_def = {
-                "primary_key": {
-                    "columns": [],
-                    "source": None,
-                },
-                "unique_indices": defaultdict(list),
-                "column_defs": {},
+                "columns": {},
+                "primary_key": [],
+                "unique_constraints": [],
+                "foreign_keys": [],
             }
 
-            # -------------------------
-            # COLUMN METADATA
-            # -------------------------
-            try:
-                for col in cursor.columns(table=table):
-                    table_def["column_defs"][col.column_name] = {
-                        "data_type_name": col.type_name,
-                        "sql_data_type": col.sql_data_type,
-                        "is_nullable": bool(col.is_nullable),
-                        "column_size": col.column_size,
-                        "decimal_digits": col.decimal_digits,
-                    }
-            except pyodbc.Error as e:
-                raise AccessSchemaError(
-                    f"Failed to extract columns for table '{table}'"
-                ) from e
+            # ---------------- Columns ----------------
+            for col in db_cursor.columns(table=raw_table):
+                col_name = col.column_name.lower()
+                access_type = (col.type_name or "").lower()
 
-            # -------------------------
-            # PRIMARY KEY – STRATEGY 1
-            # cursor.primaryKeys()
-            # -------------------------
+                table_def["columns"][col_name] = {
+                    "type": ACCESS_TYPE_MAP.get(access_type, "text"),
+                    "nullable": bool(col.is_nullable),
+                    "size": col.column_size,
+                    "scale": col.decimal_digits,
+                    "autoincrement": access_type in {
+                        "counter",
+                        "autoincrement",
+                    },
+                }
+
+            # ---------------- Primary Keys (Strategy 1) ----------------
             try:
-                pk_cols = [
-                    pk.column_name
-                    for pk in cursor.primaryKeys(table=table)
-                ]
-                if pk_cols:
-                    table_def["primary_key"] = {
-                        "columns": pk_cols,
-                        "source": "primaryKeys",
-                    }
+                for pk in db_cursor.primaryKeys(table=raw_table):
+                    if pk.column_name:
+                        table_def["primary_key"].append(
+                            pk.column_name.lower()
+                        )
             except pyodbc.Error:
-                # Driver does not support this reliably
                 pass
 
-            # -------------------------
-            # INDEX METADATA
-            # -------------------------
+            # ---------------- Indexes & PK Fallback ----------------
+            unique_indexes = defaultdict(list)
+
+            for stat in db_cursor.statistics(table=raw_table):
+                if not stat.index_name or not stat.column_name:
+                    continue
+
+                if stat.non_unique == 0:
+                    idx_name = stat.index_name.lower()
+                    col_name = stat.column_name.lower()
+                    unique_indexes[idx_name].append(col_name)
+
+                    if (
+                        not table_def["primary_key"]
+                        and "primary" in idx_name
+                    ):
+                        table_def["primary_key"].append(col_name)
+
+            table_def["unique_constraints"] = list(
+                unique_indexes.values()
+            )
+
+            # ---------------- PK Fallback: AUTOINCREMENT ----------------
+            if not table_def["primary_key"]:
+                auto_cols = [
+                    name
+                    for name, meta in table_def["columns"].items()
+                    if meta["autoincrement"] and not meta["nullable"]
+                ]
+
+                if len(auto_cols) == 1:
+                    table_def["primary_key"] = auto_cols
+
+            # ---------------- Foreign Keys ----------------
             try:
-                for stat in cursor.statistics(table=table):
-                    if not stat.index_name:
-                        continue
-
-                    if stat.non_unique == 0:
-                        table_def["unique_indices"][stat.index_name].append(
-                            stat.column_name
-                        )
-            except pyodbc.Error as e:
-                raise AccessSchemaError(
-                    f"Failed to extract index metadata for table '{table}'"
-                ) from e
-
-            table_def["unique_indices"] = dict(table_def["unique_indices"])
-
-            # -------------------------
-            # PRIMARY KEY – STRATEGY 2
-            # Unique index fallback
-            # -------------------------
-            if not table_def["primary_key"]["columns"]:
-                for idx_name, cols in table_def["unique_indices"].items():
-                    # Access often names PK index "PrimaryKey" or similar
-                    if idx_name.lower().startswith("primary"):
-                        table_def["primary_key"] = {
-                            "columns": cols,
-                            "source": "unique_index",
+                for fk in db_cursor.foreignKeys(table=raw_table):
+                    table_def["foreign_keys"].append(
+                        {
+                            "columns": [fk.fkcolumn_name.lower()],
+                            "ref_table": fk.pktable_name.lower(),
+                            "ref_columns": [fk.pkcolumn_name.lower()],
+                            "on_delete": fk.delete_rule,
                         }
-                        break
+                    )
+            except pyodbc.Error:
+                # Access ODBC often fails silently here
+                pass
 
-            # -------------------------
-            # PRIMARY KEY – STRATEGY 3
-            # Heuristic inference
-            # -------------------------
-            if not table_def["primary_key"]["columns"]:
-                candidates: List[str] = []
-
-                for col_name, col_def in table_def["column_defs"].items():
-                    if not col_def["is_nullable"]:
-                        lname = col_name.lower()
-                        if lname == "id" or lname == f"{table.lower()}_id":
-                            candidates.append(col_name)
-
-                if len(candidates) == 1:
-                    table_def["primary_key"] = {
-                        "columns": candidates,
-                        "source": "heuristic",
-                    }
-
-            schema[table] = table_def
-
-    except pyodbc.Error as e:
-        raise AccessSchemaError(
-            f"ODBC error while reading Access schema: {e}"
-        ) from e
+            schema_ir["tables"][table] = table_def
 
     finally:
-        if cursor is not None:
+        # ---------------- Cleanup ----------------
+        if db_cursor:
             try:
-                cursor.close()
+                db_cursor.close()
             except pyodbc.Error:
                 pass
 
-        if conn is not None:
+        if db_conn:
             try:
-                conn.close()
+                db_conn.close()
             except pyodbc.Error:
                 pass
 
-    return schema
+    return schema_ir
+
+
+# def extract_ms_access_db_schema(file_path: str) -> Dict[str, Any]:
+#     """
+#     Extract table schema from a Microsoft Access database using pyodbc,
+#     including primary key detection with multiple fallback strategies.
+
+#     Parameters
+#     ----------
+#     file_path : str
+#         Absolute path to .mdb or .accdb file
+
+#     Returns
+#     -------
+#     dict
+#         Schema definition keyed by table name
+#     """
+#     path = Path(file_path)
+
+#     if path.suffix.lower() not in {".mdb", ".accdb"}:
+#         raise ValueError("file_path must reference a .mdb or .accdb file")
+
+#     if not path.exists():
+#         raise FileNotFoundError(f"Database file not found: {path}")
+
+#     schema: Dict[str, Any] = {}
+
+#     conn = None
+#     cursor = None
+
+#     try:
+#         conn, cursor = odbc_connect_ms_access(str(path))
+
+#         excluded_prefixes = ("MSys", "USys")
+#         excluded_exact = {"Paste Errors", "Switchboard Items"}
+
+#         try:
+#             tables = [
+#                 t.table_name
+#                 for t in cursor.tables(tableType="TABLE")
+#                 if not (
+#                     t.table_name in excluded_exact
+#                     or t.table_name.startswith(excluded_prefixes)
+#                 )
+#             ]
+#         except pyodbc.Error as e:
+#             raise AccessSchemaError("Failed to enumerate tables") from e
+
+#         for table in tables:
+#             table_def = {
+#                 "primary_key": {
+#                     "columns": [],
+#                     "source": None,
+#                 },
+#                 "unique_indices": defaultdict(list),
+#                 "column_defs": {},
+#             }
+
+#             # -------------------------
+#             # COLUMN METADATA
+#             # -------------------------
+#             try:
+#                 for col in cursor.columns(table=table):
+#                     table_def["column_defs"][col.column_name] = {
+#                         "data_type_name": col.type_name,
+#                         "sql_data_type": col.sql_data_type,
+#                         "is_nullable": bool(col.is_nullable),
+#                         "column_size": col.column_size,
+#                         "decimal_digits": col.decimal_digits,
+#                     }
+#             except pyodbc.Error as e:
+#                 raise AccessSchemaError(
+#                     f"Failed to extract columns for table '{table}'"
+#                 ) from e
+
+#             # -------------------------
+#             # PRIMARY KEY – STRATEGY 1
+#             # cursor.primaryKeys()
+#             # -------------------------
+#             try:
+#                 pk_cols = [
+#                     pk.column_name
+#                     for pk in cursor.primaryKeys(table=table)
+#                 ]
+#                 if pk_cols:
+#                     table_def["primary_key"] = {
+#                         "columns": pk_cols,
+#                         "source": "primaryKeys",
+#                     }
+#             except pyodbc.Error:
+#                 # Driver does not support this reliably
+#                 pass
+
+#             # -------------------------
+#             # INDEX METADATA
+#             # -------------------------
+#             try:
+#                 for stat in cursor.statistics(table=table):
+#                     if not stat.index_name:
+#                         continue
+
+#                     if stat.non_unique == 0:
+#                         table_def["unique_indices"][stat.index_name].append(
+#                             stat.column_name
+#                         )
+#             except pyodbc.Error as e:
+#                 raise AccessSchemaError(
+#                     f"Failed to extract index metadata for table '{table}'"
+#                 ) from e
+
+#             table_def["unique_indices"] = dict(table_def["unique_indices"])
+
+#             # -------------------------
+#             # PRIMARY KEY – STRATEGY 2
+#             # Unique index fallback
+#             # -------------------------
+#             if not table_def["primary_key"]["columns"]:
+#                 for idx_name, cols in table_def["unique_indices"].items():
+#                     # Access often names PK index "PrimaryKey" or similar
+#                     if idx_name.lower().startswith("primary"):
+#                         table_def["primary_key"] = {
+#                             "columns": cols,
+#                             "source": "unique_index",
+#                         }
+#                         break
+
+#             # -------------------------
+#             # PRIMARY KEY – STRATEGY 3
+#             # Heuristic inference
+#             # -------------------------
+#             if not table_def["primary_key"]["columns"]:
+#                 candidates: List[str] = []
+
+#                 for col_name, col_def in table_def["column_defs"].items():
+#                     if not col_def["is_nullable"]:
+#                         lname = col_name.lower()
+#                         if lname == "id" or lname == f"{table.lower()}_id":
+#                             candidates.append(col_name)
+
+#                 if len(candidates) == 1:
+#                     table_def["primary_key"] = {
+#                         "columns": candidates,
+#                         "source": "heuristic",
+#                     }
+
+#             schema[table] = table_def
+
+#     except pyodbc.Error as e:
+#         raise AccessSchemaError(
+#             f"ODBC error while reading Access schema: {e}"
+#         ) from e
+
+#     finally:
+#         if cursor is not None:
+#             try:
+#                 cursor.close()
+#             except pyodbc.Error:
+#                 pass
+
+#         if conn is not None:
+#             try:
+#                 conn.close()
+#             except pyodbc.Error:
+#                 pass
+
+#     return schema
 
 
 # %% Index extraction testing
