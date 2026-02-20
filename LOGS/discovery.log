@@ -1,0 +1,17 @@
+2026-02-20 16:29:58,995 - ERROR - Provided root directory is invalid or inaccessible: \\nysed.gov\SED\OCE\Museum\Arc\'CRSP Fieldwork 2025
+2026-02-20 16:30:17,238 - ERROR - Provided root directory is invalid or inaccessible: \\nysed.gov\SED\OCE\Museum\Arc\'CRSP Fieldwork 2025'
+2026-02-20 17:11:28,492 - INFO - Starting discovery across 2 directories.
+2026-02-20 17:11:28,495 - INFO - Scanning directory: ..\..\data\input_samples
+2026-02-20 17:11:28,546 - INFO - Scanning directory: X:\CRSP Fieldwork 2025
+2026-02-20 17:11:36,617 - INFO - Scan complete. Found 34 Access databases.
+2026-02-20 17:11:36,617 - INFO - Discovery complete. Inventory saved to: C:\Users\scardina\OneDrive - New York State Education Department\Documents\Projects\CRSP_Access_Database_Migration\data\staging_exports\database_inventory.csv
+2026-02-20 17:13:13,643 - INFO - Starting discovery across 2 directories.
+2026-02-20 17:13:13,645 - INFO - Scanning directory: ..\..\data\input_samples
+2026-02-20 17:13:13,693 - INFO - Scanning directory: X:\CRSP Fieldwork 2025
+2026-02-20 17:13:21,588 - INFO - Scan complete. Found 34 Access databases.
+2026-02-20 17:13:21,588 - INFO - Discovery complete. Inventory saved to: C:\Users\scardina\OneDrive - New York State Education Department\Documents\Projects\CRSP_Access_Database_Migration\data\staging_exports\database_inventory.csv
+2026-02-20 17:16:43,578 - INFO - Starting discovery across 2 directories.
+2026-02-20 17:16:43,578 - INFO - Scanning directory: ..\..\data\input_samples
+2026-02-20 17:16:43,630 - INFO - Scanning directory: X:\CRSP Fieldwork 2025
+2026-02-20 17:16:52,528 - INFO - Scan complete. Found 34 Access databases.
+2026-02-20 17:16:52,528 - INFO - Discovery complete. Inventory saved to: C:\Users\scardina\OneDrive - New York State Education Department\Documents\Projects\CRSP_Access_Database_Migration\data\staging_exports\database_inventory.csv
